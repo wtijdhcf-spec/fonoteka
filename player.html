@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0810">
 <title>Фонотека • Онлайн</title>
 <style>
   :root{
     --bg:#0A0810; --surface:#15101F; --surface-2:#1D1630; --surface-3:#271D3D;
     --line:#2C2440; --line-2:#3A3055; --text:#F4EFFA; --muted:#9D92B4; --muted-2:#6E6488;
-    --amber:#F7B940; --amber-2:#FFD37A; --pink:#FF6FA5; --violet:#B98CFF;
+    --amber:#F7B940; --amber-2:#FFD37A; --pink:#FF6FA5; --violet:#B98CFF; --green:#5FD68A;
   }
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
   body{
@@ -52,31 +53,41 @@
   }
   .row:active{background:var(--surface-3)}
   .row.playing{border-color:var(--amber); background:var(--surface-2)}
-  .thumb{width:72px; height:54px; border-radius:9px; object-fit:cover; flex-shrink:0; background:var(--surface-3)}
+  .thumb{width:56px; height:56px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-3)}
   .info{min-width:0; flex:1}
   .title{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .chan{font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px}
+  .badge{display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:20px; margin-left:6px; vertical-align:middle}
+  .badge.full{background:#0e2a1a; color:var(--green)}
+  .badge.prev{background:#2a1030; color:var(--pink)}
   .play-ic{color:var(--amber); font-size:20px; padding:0 6px; flex-shrink:0}
 
   /* нижний проигрыватель */
   #bar{
     position:fixed; left:0; right:0; bottom:0; z-index:30;
-    background:linear-gradient(180deg,rgba(21,16,31,.96),rgba(10,8,16,.99));
+    background:linear-gradient(180deg,rgba(21,16,31,.97),rgba(10,8,16,.99));
     border-top:1px solid var(--line-2);
-    padding:10px 12px calc(10px + env(safe-area-inset-bottom));
-    transform:translateY(120%); transition:transform .25s ease;
+    padding:10px 14px calc(12px + env(safe-area-inset-bottom));
+    transform:translateY(130%); transition:transform .25s ease;
   }
   #bar.up{transform:translateY(0)}
-  .np{display:flex; align-items:center; gap:10px}
-  #ytwrap{width:96px; height:64px; border-radius:10px; overflow:hidden; flex-shrink:0; background:#000}
-  #ytwrap iframe{width:100%; height:100%; border:0}
+  .np{display:flex; align-items:center; gap:12px}
+  #npArt{width:52px; height:52px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-3)}
   .np-info{min-width:0; flex:1}
   #npTitle{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  #npChan{font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px}
-  .np-note{font-size:11px; color:var(--muted-2); margin-top:3px}
+  #npChan{font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px}
+  #npNote{font-size:11px; color:var(--muted-2); margin-top:2px}
+  #npNote a{color:var(--amber-2)}
+  #ppBtn{
+    width:48px; height:48px; border-radius:50%; border:none; flex-shrink:0; cursor:pointer;
+    background:linear-gradient(135deg,var(--amber),var(--amber-2)); color:#0E0B14; font-size:20px;
+  }
+  .prog{height:4px; background:var(--surface-3); border-radius:3px; margin-top:10px; overflow:hidden}
+  .prog>i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--amber),var(--pink))}
+  /* невидимый YouTube-iframe (звук идёт, видео прячем) */
+  #ytwrap{position:fixed; width:1px; height:1px; left:-9999px; top:0; opacity:0}
   .spin{display:inline-block; width:18px; height:18px; border:2px solid var(--line-2); border-top-color:var(--amber); border-radius:50%; animation:sp .8s linear infinite; vertical-align:-4px; margin-right:8px}
   @keyframes sp{to{transform:rotate(360deg)}}
-  .setup a{color:var(--amber-2)}
   code{background:var(--surface-3); padding:2px 6px; border-radius:6px; font-size:13px}
 </style>
 </head>
@@ -97,105 +108,180 @@
   <!-- нижний плеер -->
   <div id="bar">
     <div class="np">
-      <div id="ytwrap"><div id="player"></div></div>
+      <img id="npArt" alt="">
       <div class="np-info">
         <div id="npTitle">—</div>
         <div id="npChan"></div>
-        <div class="np-note">играет через YouTube · звук в фоне идёт</div>
+        <div id="npNote"></div>
       </div>
+      <button id="ppBtn">⏸</button>
     </div>
+    <div class="prog"><i id="progBar"></i></div>
   </div>
 
+  <audio id="au" playsinline></audio>
+  <div id="ytwrap"><div id="ytplayer"></div></div>
+
 <script>
-  // ================== НАСТРОЙКА ==================
-  // Сюда вставляется бесплатный ключ YouTube (Claude добавит после того, как ты его получишь)
-  const YT_API_KEY = "ВСТАВЬ_КЛЮЧ_СЮДА";
-  // ==============================================
+  /* ================== НАСТРОЙКА (одноразовая, владельцем) ==================
+     Чтобы на телефоне играли ПОЛНЫЕ песни для ЛЮБОГО запроса (включая русскую
+     попсу) — вставь сюда бесплатный ключ YouTube между кавычками.
+     Как получить ключ — написано на странице, откуда качают Фонотеку.
+     Пока ключа нет: поиск всё равно работает (каталог iTunes), полные песни
+     играют там, где есть в Audius, остальное — 30-секундным превью. */
+  const YT_API_KEY = "";
+  /* ======================================================================== */
 
   const $ = s => document.querySelector(s);
-  const list = $('#list'), status = $('#status'), bar = $('#bar');
-  let player, ytReady = false, curRow = null;
+  const list=$('#list'), status=$('#status'), bar=$('#bar'), au=$('#au');
+  const npTitle=$('#npTitle'), npChan=$('#npChan'), npNote=$('#npNote'), npArt=$('#npArt'),
+        ppBtn=$('#ppBtn'), progBar=$('#progBar');
+  const hasYT = YT_API_KEY && YT_API_KEY.trim().length > 10;
 
-  // грузим YouTube IFrame API
-  const tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
-  window.onYouTubeIframeAPIReady = function(){
-    player = new YT.Player('player', {
-      height:'64', width:'96',
-      playerVars:{playsinline:1, rel:0},
-      events:{ 'onReady': ()=>{ ytReady = true; } }
-    });
-  };
+  let results=[], curIdx=-1, curRow=null, mode=null; // mode: 'yt' | 'audio'
+  let ytPlayer=null, ytReady=false, audiusHost=null;
 
   function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function norm(s){return (s||'').toLowerCase().replace(/[^a-zа-я0-9 ]/gi,' ').replace(/\s+/g,' ').trim();}
 
-  function showSetup(){
-    status.innerHTML = `<div class="msg setup">
-      <b>Плеер почти готов 🙌</b><br>
-      Осталось вставить бесплатный ключ YouTube (одноразовая настройка владельцем).
-      Пока его нет — поиск не работает. Хозяин Фонотеки, вставь ключ в файл
-      <code>player.html</code> в строку <code>YT_API_KEY</code>.
-    </div>`;
+  /* ---------- YouTube IFrame (только если задан ключ) ---------- */
+  if(hasYT){
+    const tag=document.createElement('script'); tag.src="https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady=function(){
+      ytPlayer=new YT.Player('ytplayer',{height:'1',width:'1',
+        playerVars:{playsinline:1,rel:0},
+        events:{'onReady':()=>{ytReady=true;},'onStateChange':onYtState}});
+    };
+  }
+  function onYtState(e){
+    if(e.data===YT.PlayerState.PLAYING){ ppBtn.textContent='⏸'; tickYT(); }
+    else if(e.data===YT.PlayerState.PAUSED){ ppBtn.textContent='▶'; }
+    else if(e.data===YT.PlayerState.ENDED){ next(); }
+  }
+  function tickYT(){
+    if(mode!=='yt'||!ytPlayer||!ytPlayer.getDuration) return;
+    const d=ytPlayer.getDuration()||0, c=ytPlayer.getCurrentTime()||0;
+    progBar.style.width=(d?100*c/d:0)+'%';
+    if(mode==='yt') setTimeout(tickYT,500);
   }
 
+  /* ---------- поиск: каталог iTunes (без ключа, весь каталог) ---------- */
   async function search(){
-    const q = $('#q').value.trim();
-    if(!q) return;
-    if(!YT_API_KEY || YT_API_KEY.indexOf('ВСТАВЬ') === 0){ showSetup(); return; }
-    list.innerHTML = '';
-    status.innerHTML = '<div class="hint"><span class="spin"></span>Ищу…</div>';
+    const q=$('#q').value.trim(); if(!q) return;
+    list.innerHTML=''; status.innerHTML='<div class="hint"><span class="spin"></span>Ищу…</div>';
     try{
-      const url = 'https://www.googleapis.com/youtube/v3/search'
-        + '?part=snippet&type=video&videoCategoryId=10&maxResults=20'
-        + '&q=' + encodeURIComponent(q) + '&key=' + YT_API_KEY;
-      const r = await fetch(url);
-      const data = await r.json();
-      if(data.error){
-        status.innerHTML = '<div class="msg">Поиск временно недоступен (лимит ключа на сегодня исчерпан или ключ неверный). Попробуй позже.</div>';
-        return;
-      }
-      if(!data.items || !data.items.length){
-        status.innerHTML = '<div class="hint">Ничего не нашлось 🤷</div>';
-        return;
-      }
-      status.innerHTML = '';
-      data.items.forEach(it => {
-        const id = it.id.videoId; if(!id) return;
-        const sn = it.snippet;
-        const row = document.createElement('div');
-        row.className = 'row';
-        row.innerHTML =
-          `<img class="thumb" loading="lazy" src="${sn.thumbnails.medium.url}">
-           <div class="info">
-             <div class="title">${esc(sn.title)}</div>
-             <div class="chan">${esc(sn.channelTitle)}</div>
-           </div>
-           <div class="play-ic">▶</div>`;
-        row.onclick = () => play(id, sn.title, sn.channelTitle, row);
-        list.appendChild(row);
-      });
+      const url='https://itunes.apple.com/search?media=music&entity=song&limit=25&term='+encodeURIComponent(q);
+      const r=await fetch(url); const data=await r.json();
+      const items=(data.results||[]).filter(x=>x.trackName);
+      if(!items.length){ status.innerHTML='<div class="hint">Ничего не нашлось 🤷</div>'; return; }
+      results=items.map(x=>({
+        title:x.trackName, artist:x.artistName,
+        art:(x.artworkUrl100||'').replace('100x100','300x300'),
+        preview:x.previewUrl||'', dur:x.trackTimeMillis?Math.round(x.trackTimeMillis/1000):0
+      }));
+      status.innerHTML='';
+      list.innerHTML=results.map((t,i)=>
+        `<div class="row" data-i="${i}">
+           <img class="thumb" loading="lazy" src="${esc(t.art)}" alt="">
+           <div class="info"><div class="title">${esc(t.title)}</div><div class="chan">${esc(t.artist)}</div></div>
+           <div class="play-ic">▶</div>
+         </div>`).join('');
     }catch(e){
-      status.innerHTML = '<div class="msg">Нет связи с поиском. Проверь интернет и попробуй ещё раз.</div>';
+      status.innerHTML='<div class="msg">Нет связи с поиском. Проверь интернет и попробуй ещё раз.</div>';
     }
   }
 
-  function play(id, title, chan, row){
-    if(!ytReady){ setTimeout(()=>play(id,title,chan,row), 400); return; }
-    if(curRow) curRow.classList.remove('playing');
-    curRow = row; row.classList.add('playing');
-    $('#npTitle').textContent = title;
-    $('#npChan').textContent = chan;
-    bar.classList.add('up');
-    player.loadVideoById(id);
-    player.playVideo();
+  /* ---------- Audius: полная песня без ключа (если найдётся) ---------- */
+  function _to(ms){ try{ return AbortSignal.timeout(ms); }catch(e){ return undefined; } }
+  async function audiusFind(t){
+    try{
+      if(!audiusHost){
+        const h=await (await fetch('https://api.audius.co',{signal:_to(2500)})).json();
+        audiusHost=(h.data||[])[0];
+      }
+      if(!audiusHost) return null;
+      const u=audiusHost+'/v1/tracks/search?app_name=fonoteka&query='+encodeURIComponent(t.artist+' '+t.title);
+      const d=await (await fetch(u,{signal:_to(2500)})).json();
+      const want=norm(t.title);
+      for(const it of (d.data||[])){
+        const got=norm(it.title);
+        if(got && (got.includes(want)||want.includes(got)))
+          return audiusHost+'/v1/tracks/'+it.id+'/stream?app_name=fonoteka';
+      }
+    }catch(e){}
+    return null;
   }
 
-  $('#go').onclick = search;
-  $('#q').addEventListener('keydown', e => { if(e.key === 'Enter') search(); });
+  /* ---------- YouTube: полная песня для чего угодно (нужен ключ) ---------- */
+  async function ytFind(t){
+    try{
+      const u='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=1'
+        +'&q='+encodeURIComponent(t.artist+' '+t.title)+'&key='+YT_API_KEY;
+      const d=await (await fetch(u)).json();
+      if(d.error) return null;
+      const it=(d.items||[])[0];
+      return it&&it.id?it.id.videoId:null;
+    }catch(e){ return null; }
+  }
 
-  // приветствие
-  status.innerHTML = '<div class="hint">Введи название песни и жми 🔍<br>Играет прямо здесь, скачивать ничего не надо.</div>';
+  /* ---------- воспроизведение ---------- */
+  async function play(i){
+    const t=results[i]; if(!t) return;
+    curIdx=i;
+    if(curRow) curRow.classList.remove('playing');
+    curRow=list.querySelector('.row[data-i="'+i+'"]'); if(curRow) curRow.classList.add('playing');
+    npArt.src=t.art||''; npTitle.textContent=t.title; npChan.textContent=t.artist;
+    npNote.innerHTML='<span class="spin" style="width:12px;height:12px"></span>ищу песню…';
+    bar.classList.add('up'); ppBtn.textContent='⏸'; progBar.style.width='0%';
+    try{ au.pause(); }catch(e){}
+    if(ytPlayer&&ytReady){ try{ytPlayer.stopVideo();}catch(e){} }
+
+    // 1) есть ключ -> YouTube (полная песня, любой каталог)
+    if(hasYT){
+      const vid=await ytFind(t);
+      if(curIdx!==i) return;
+      if(vid && ytReady){ mode='yt'; ytPlayer.loadVideoById(vid); ytPlayer.playVideo();
+        npNote.textContent='полная песня'; return; }
+    }
+    // 2) без ключа -> пробуем Audius (полная песня, если есть)
+    const aud=await audiusFind(t);
+    if(curIdx!==i) return;
+    if(aud){ mode='audio'; au.src=aud; au.play().catch(()=>{});
+      npNote.innerHTML='полная песня'; return; }
+    // 3) иначе -> 30-сек превью + ссылка на YouTube
+    if(t.preview){ mode='audio'; au.src=t.preview; au.play().catch(()=>{});
+      const yurl='https://www.youtube.com/results?search_query='+encodeURIComponent(t.artist+' '+t.title);
+      npNote.innerHTML='30 сек · <a href="'+yurl+'" target="_blank" rel="noopener">послушать целиком на YouTube ↗</a>';
+    }else{
+      npNote.textContent='эту песню не удалось воспроизвести';
+    }
+  }
+  function next(){ if(curIdx>=0 && curIdx<results.length-1) play(curIdx+1); }
+  function prev(){ if(curIdx>0) play(curIdx-1); }
+
+  // прогресс/окончание для <audio>
+  au.addEventListener('timeupdate',()=>{ if(mode==='audio'&&au.duration) progBar.style.width=(100*au.currentTime/au.duration)+'%'; });
+  au.addEventListener('ended',next);
+  au.addEventListener('play',()=>{ if(mode==='audio')ppBtn.textContent='⏸'; });
+  au.addEventListener('pause',()=>{ if(mode==='audio')ppBtn.textContent='▶'; });
+
+  // play/pause кнопка
+  ppBtn.addEventListener('click',()=>{
+    if(mode==='yt'&&ytPlayer){
+      const st=ytPlayer.getPlayerState();
+      if(st===YT.PlayerState.PLAYING)ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+    }else if(mode==='audio'){
+      if(au.paused)au.play().catch(()=>{}); else au.pause();
+    }
+  });
+
+  list.addEventListener('click',e=>{ const r=e.target.closest('.row[data-i]'); if(r) play(+r.dataset.i); });
+  $('#go').onclick=search;
+  $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') search(); });
+
+  status.innerHTML='<div class="hint">Введи название песни и жми 🔍<br>Играет прямо здесь, скачивать ничего не надо.</div>'
+    + (hasYT?'':'<div class="msg" style="margin-top:12px">👉 Сейчас песни, которых нет в свободном каталоге, играют <b>30 секунд</b>. Чтобы играли <b>целиком любые песни</b> — владелец один раз добавит бесплатный ключ YouTube (инструкция на странице скачивания).</div>');
 </script>
 </body>
 </html>
