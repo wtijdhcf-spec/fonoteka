@@ -1,0 +1,13 @@
+# «Чертёж» для Render: разворачивает движок Фонотеки в один клик.
+# Ссылка: https://render.com/deploy?repo=https://github.com/wtijdhcf-spec/fonoteka
+services:
+  - type: web
+    name: fonoteka-server
+    runtime: docker
+    dockerfilePath: server/Dockerfile
+    dockerContext: server
+    plan: free
+    autoDeploy: false
+    envVars:
+      - key: FONO_NO_YT
+        value: "1"
