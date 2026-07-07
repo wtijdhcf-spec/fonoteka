@@ -488,6 +488,24 @@
     .dlrow{padding:9px 6px}
     .dlplay,.dldl{min-width:40px;min-height:40px}
   }
+  /* ===== Совсем маленькие телефоны (≤380px) — чуть плотнее ===== */
+  @media(max-width:380px){
+    .main{padding:13px 11px calc(var(--player-h) + 24px)}
+    .lh-title{font-size:19px}
+    .lh-sub{font-size:11.5px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:12px}
+    .tab{padding:7px 11px;font-size:12px}
+    .brand h1{font-size:17px}
+  }
+  /* ===== Большие мониторы — контент шире, не пустует по краям ===== */
+  @media(min-width:1500px){
+    .main{max-width:1280px;padding:30px 40px calc(var(--player-h) + 48px)}
+  }
+  @media(min-width:2000px){
+    :root{--side-w:300px}
+    .main{max-width:1500px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  }
   @media(prefers-reduced-motion:reduce){
     *{animation-duration:.001s!important}
     .vu i{animation:none}
