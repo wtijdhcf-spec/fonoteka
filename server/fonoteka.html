@@ -777,7 +777,7 @@
 
   /* ============ Книги (раздел «Книги» / «Мои книги») — стиль КнигаДом ============ */
   #books{--bkg:linear-gradient(120deg,#B98CFF 0%,#FF7EB6 100%);--bkv:#C79BFF;--bkp:#FF7EB6;position:relative;overflow:hidden}
-  #books>*{position:relative;z-index:1}
+  #books>*:not(.bk-orb){position:relative;z-index:1}
   .bk-orb{position:absolute;top:-32%;left:50%;transform:translateX(-50%);width:940px;height:620px;max-width:135%;background:radial-gradient(ellipse at center,rgba(185,140,255,.18),rgba(255,126,182,.07) 42%,transparent 70%);pointer-events:none;z-index:0}
   .bk-grad{background:var(--bkg);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
   /* сегменты Поиск/Мои книги/Источники */
