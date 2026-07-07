@@ -409,6 +409,14 @@ BOOK_SOURCES = {
 }
 BOOK_ORDER = ["rutube", "youtube"]
 
+# В облаке (FONO_NO_YT) YouTube-книги тоже убираем: их поиск через yt-dlp на
+# сервере ВИСНЕТ (YouTube блокирует дата-центр) → книжный поиск тормозит на
+# 30 сек, а клик по такой книге открывал бы сам YouTube. Остаётся Rutube
+# (+ клиентские LibriVox/Архив, они грузятся прямо в браузере).
+if os.environ.get("FONO_NO_YT"):
+    BOOK_SOURCES.pop("youtube", None)
+    BOOK_ORDER = [s for s in BOOK_ORDER if s in BOOK_SOURCES]
+
 def book_search(query, sources=None):
     """Поиск аудиокниг по akniga.org / audioknigi.pro параллельно, чередуя."""
     chosen = [s for s in (sources or BOOK_ORDER) if s in BOOK_SOURCES] or list(BOOK_ORDER)

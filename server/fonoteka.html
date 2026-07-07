@@ -1994,13 +1994,17 @@
     $$(".dlplay.on").forEach(b=>{b.classList.remove("on");b.textContent="▶";});
     btn.disabled=true; btn.textContent="…";
     // Быстрый путь: прямой стрим без скачивания файла (играть начинает сразу).
-    try{
-      const d=await apiGet("/api/stream?url="+encodeURIComponent(x.url), 30000);
-      if(d&&d.ok&&d.stream){
-        playPreview(x,d.stream,true); btn.textContent="♪"; btn.classList.add("on"); btn.disabled=false;
-        return;
-      }
-    }catch(e){}
+    // Rutube нельзя стримить напрямую (особый формат) — сразу качаем и играем,
+    // не тратя время на заведомо неудачный стрим.
+    if(!/rutube\.ru/.test(x.url||"")){
+      try{
+        const d=await apiGet("/api/stream?url="+encodeURIComponent(x.url), 30000);
+        if(d&&d.ok&&d.stream){
+          playPreview(x,d.stream,true); btn.textContent="♪"; btn.classList.add("on"); btn.disabled=false;
+          return;
+        }
+      }catch(e){}
+    }
     // Запасной путь: если стрим не дался — скачиваем целиком и играем.
     const d=await fetchDownload(x,2);
     btn.disabled=false;
