@@ -370,13 +370,44 @@ def _youtube_book_search(query, n=15):
         })
     return out
 
+def _rutube_book_search(query, n=20):
+    """Аудиокниги с Rutube — играются ПРЯМО в приложении через встроенный плеер
+    (rutube.ru/play/embed/<id>), без «перехода на сайт». Rutube не блокирует
+    серверы, поэтому работает и в облаке. Ищем «<запрос> аудиокнига»."""
+    try:
+        url = ("https://rutube.ru/api/search/video/?client=wdp&query=%s"
+               % urllib.parse.quote(query + " аудиокнига"))
+        data = _http_json(url)
+    except Exception:
+        return []
+    out = []
+    for d in (data.get("results") or []):
+        vid = d.get("id")
+        title = (d.get("title") or "").strip()
+        if not vid or not title:
+            continue
+        out.append({
+            "title": title,
+            "author": ((d.get("author") or {}).get("name") or "").strip(),
+            "cover": d.get("thumbnail_url") or "",
+            "url": d.get("video_url") or "",
+            "source": "rutube",
+            "type": "audio",
+            "rt": vid,                       # id для встроенного плеера (embed)
+            "duration": d.get("duration"),
+        })
+        if len(out) >= n:
+            break
+    return out
+
+# akniga/audioknigi/КнигаВухе убраны: их звук нельзя воспроизвести в приложении
+# (сайты его прячут), оставались только «Открыть на сайте». Взамен — Rutube
+# (встроенный плеер, играет внутри) + YouTube. Плюс клиентские LibriVox/Архив.
 BOOK_SOURCES = {
-    "akniga": lambda q: _akniga_search(q, 24),
-    "audioknigi": lambda q: _audioknigi_search(q, 24),
-    "knigavuhe": lambda q: _knigavuhe_search(q, 24),
+    "rutube": lambda q: _rutube_book_search(q, 20),
     "youtube": lambda q: _youtube_book_search(q, 15),
 }
-BOOK_ORDER = ["akniga", "audioknigi", "knigavuhe", "youtube"]
+BOOK_ORDER = ["rutube", "youtube"]
 
 def book_search(query, sources=None):
     """Поиск аудиокниг по akniga.org / audioknigi.pro параллельно, чередуя."""

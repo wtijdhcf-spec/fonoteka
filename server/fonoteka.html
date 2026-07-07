@@ -1234,9 +1234,7 @@
         </div>
 
         <div class="bk-chips" id="bksrc">
-          <button type="button" data-src="akniga" class="on">akniga.org</button>
-          <button type="button" data-src="audioknigi" class="on">audioknigi.pro</button>
-          <button type="button" data-src="knigavuhe" class="on">КнигаВухе</button>
+          <button type="button" data-src="rutube" class="on">Rutube</button>
           <button type="button" data-src="youtube" class="on">▶ YouTube</button>
           <button type="button" data-src="librivox" class="on">LibriVox</button>
           <button type="button" data-src="archive" class="on">Интернет-Архив</button>
@@ -4186,6 +4184,16 @@ window.GamesHub=(function(){
     <div id="bkModalList"></div>
   </div>
 </div>
+<!-- Встроенный плеер аудиокниги (Rutube) — играет прямо в приложении -->
+<div class="bk-modal" id="bkEmbed" hidden>
+  <div class="bk-modal-ov" id="bkEmbedOv"></div>
+  <div class="bk-modal-box" style="width:min(760px,96vw);padding:0;overflow:hidden">
+    <div class="bk-modal-h" style="padding:12px 16px"><h3 id="bkEmbedT">Аудиокнига</h3><button class="bk-p-x" id="bkEmbedX">✕</button></div>
+    <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000">
+      <iframe id="bkEmbedFrame" src="" allow="autoplay; clipboard-write; fullscreen; encrypted-media" allowfullscreen frameborder="0" style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ================= РАЗДЕЛ «КНИГИ» =================
@@ -4281,14 +4289,17 @@ window.GamesHub=(function(){
 
   const SRC_LABEL={akniga:"akniga.org",audioknigi:"audioknigi.pro",knigavuhe:"КнигаВухе",youtube:"YouTube",librivox:"LibriVox",archive:"Архив",openlibrary:"Open Library",gutenberg:"Gutenberg"};
   const CLIENT_FN={openlibrary:searchOpenLibrary,gutenberg:searchGutenberg,librivox:searchLibrivox,archive:searchArchive};
-  const SERVER_SRC=["akniga","audioknigi","knigavuhe","youtube"];
+  const SERVER_SRC=["rutube","youtube"];
 
   function chosenSrcs(){return [...document.querySelectorAll("#bksrc button.on")].map(b=>b.dataset.src);}
-  function bkId(b){return b.source+":"+(b.title||"").toLowerCase().slice(0,60)+"|"+(b.author||"").toLowerCase().slice(0,40);}
+  // Убираем символы, которые ломают HTML-атрибуты data-id/data-play (кавычки,
+  // угловые скобки, &) — иначе название вроде Толстой "Война и мир" обрывает
+  // атрибут, и книга не находится в lastResults при клике «Слушать».
+  function bkId(b){return (b.source+":"+(b.title||"").toLowerCase().slice(0,60)+"|"+(b.author||"").toLowerCase().slice(0,40)).replace(/["'<>&]/g,"");}
 
   let lastResults={};   // id -> book (для сохранения и воспроизведения)
 
-  const WEAVE_ORDER=["akniga","audioknigi","knigavuhe","youtube","librivox","archive","openlibrary","gutenberg"];
+  const WEAVE_ORDER=["rutube","youtube","librivox","archive","openlibrary","gutenberg"];
   function weave(all){
     const bySrc={}; all.forEach(b=>{(bySrc[b.source]=bySrc[b.source]||[]).push(b);});
     const out=[]; for(let i=0;;i++){let added=false;WEAVE_ORDER.forEach(s=>{if(bySrc[s]&&bySrc[s][i]){out.push(bySrc[s][i]);added=true;}});if(!added)break;}
@@ -4320,9 +4331,10 @@ window.GamesHub=(function(){
 
   function actionsHtml(b,saved){
     let h="";
-    const hasAudio=b.type==="audio"&&((b.sections&&b.sections.length)||b.iaId||b.yt);
+    const hasAudio=b.type==="audio"&&((b.sections&&b.sections.length)||b.iaId||b.yt||b.rt);
     if(hasAudio) h+=`<button class="bk-btn prim" data-play="${b._id}">🎧 Слушать</button>`;
-    if(b.pageUrl) h+=`<a class="bk-btn" href="${esc(b.pageUrl)}" target="_blank" rel="noopener">🌐 Открыть на сайте</a>`;
+    // «Открыть на сайте» — только если книгу НЕЛЬЗЯ послушать прямо в приложении
+    if(b.pageUrl && !hasAudio) h+=`<a class="bk-btn" href="${esc(b.pageUrl)}" target="_blank" rel="noopener">🌐 Открыть на сайте</a>`;
     if(b.readUrl) h+=`<a class="bk-btn" href="${esc(b.readUrl)}" target="_blank" rel="noopener">📖 Читать</a>`;
     if(b.epub) h+=`<a class="bk-btn" href="${esc(b.epub)}" target="_blank" rel="noopener">⬇ EPUB</a>`;
     h+=`<button class="bk-btn save ${saved?'on':''}" data-save="${b._id}">${saved?'🔖 Сохранено':'🔖 Сохранить'}</button>`;
@@ -4407,6 +4419,8 @@ window.GamesHub=(function(){
     document.querySelectorAll("#bkModalList .bk-chap").forEach((el,k)=>el.classList.toggle("on",k===i));
   }
   async function openBook(b){
+    // Rutube-аудиокнига — встроенный плеер прямо в приложении (без перехода на сайт)
+    if(b.rt){ openEmbed(b); return; }
     let secs=(b.sections||[]).filter(s=>s.url);
     // YouTube: прямой аудиопоток тянем через сервер (как музыку)
     if(!secs.length && b.yt){
@@ -4436,6 +4450,16 @@ window.GamesHub=(function(){
   $("#bkModalList").addEventListener("click",e=>{const c=e.target.closest("[data-i]");if(c){playIdx(+c.dataset.i);$("#bkModal").hidden=true;}});
   $("#bkModalX").addEventListener("click",()=>$("#bkModal").hidden=true);
   $("#bkModalOv").addEventListener("click",()=>$("#bkModal").hidden=true);
+  // встроенный плеер Rutube (аудиокниги играют прямо в приложении)
+  function openEmbed(b){
+    stopOthers();
+    $("#bkEmbedT").textContent=b.title||"Аудиокнига";
+    $("#bkEmbedFrame").src="https://rutube.ru/play/embed/"+encodeURIComponent(b.rt);
+    $("#bkEmbed").hidden=false;
+  }
+  function closeEmbed(){ $("#bkEmbedFrame").src=""; $("#bkEmbed").hidden=true; }
+  $("#bkEmbedX").addEventListener("click",closeEmbed);
+  $("#bkEmbedOv").addEventListener("click",closeEmbed);
   $("#bkPplay").addEventListener("click",()=>{if(audio.paused){stopOthers();audio.play();$("#bkPplay").textContent="⏸";}else{audio.pause();$("#bkPplay").textContent="▶";}});
   $("#bkPprev").addEventListener("click",()=>{if(audio.currentTime>3){audio.currentTime=0;}else playIdx(qi-1);});
   $("#bkPnext").addEventListener("click",()=>playIdx(qi+1));
