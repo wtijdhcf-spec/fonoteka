@@ -1286,11 +1286,6 @@
 
         <div class="bk-chips" id="bksrc">
           <button type="button" data-src="rutube" class="on">Rutube</button>
-          <button type="button" data-src="youtube" class="on">▶ YouTube</button>
-          <button type="button" data-src="librivox" class="on">LibriVox</button>
-          <button type="button" data-src="archive" class="on">Интернет-Архив</button>
-          <button type="button" data-src="openlibrary" class="on">Open Library</button>
-          <button type="button" data-src="gutenberg">Gutenberg</button>
         </div>
 
         <div id="bkbody">
@@ -4217,6 +4212,7 @@ window.GamesHub=(function(){
 </script>
 
 <!-- ============ Книги: мини-плеер аудиокниг + список глав ============ -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 <div class="bk-player" id="bkPlayer">
   <div class="bk-p-info">
     <div class="bk-p-thumb">🎧</div>
@@ -4391,10 +4387,7 @@ window.GamesHub=(function(){
     let h="";
     const hasAudio=b.type==="audio"&&((b.sections&&b.sections.length)||b.iaId||b.yt||b.rt);
     if(hasAudio) h+=`<button class="bk-btn prim" data-play="${b._id}">🎧 Слушать</button>`;
-    // «Открыть на сайте» — только если книгу НЕЛЬЗЯ послушать прямо в приложении
-    if(b.pageUrl && !hasAudio) h+=`<a class="bk-btn" href="${esc(b.pageUrl)}" target="_blank" rel="noopener">🌐 Открыть на сайте</a>`;
-    if(b.readUrl) h+=`<a class="bk-btn" href="${esc(b.readUrl)}" target="_blank" rel="noopener">📖 Читать</a>`;
-    if(b.epub) h+=`<a class="bk-btn" href="${esc(b.epub)}" target="_blank" rel="noopener">⬇ EPUB</a>`;
+    // Никаких «Открыть на сайте» / «Читать» — книги слушаются только в приложении.
     h+=`<button class="bk-btn save ${saved?'on':''}" data-save="${b._id}">${saved?'🔖 Сохранено':'🔖 Сохранить'}</button>`;
     return h;
   }
@@ -4467,8 +4460,23 @@ window.GamesHub=(function(){
 
   // ================= мини-плеер аудиокниг =================
   const audio=$("#bkAudio"),player=$("#bkPlayer");
-  let queue=[],qi=0;
+  let queue=[],qi=0,bkHls=null;
   function stopOthers(){const m=document.getElementById("audio");if(m&&!m.paused)m.pause();}
+  // Стрим аудиокниги (HLS Rutube через наш прокси) — играет на лету, без скачивания.
+  function stopHls(){ if(bkHls){ try{bkHls.destroy();}catch(e){} bkHls=null; } }
+  function playHls(src){
+    stopHls();
+    if(audio.canPlayType("application/vnd.apple.mpegurl")){          // Safari — нативно
+      audio.src=src; audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸";
+    } else if(window.Hls && Hls.isSupported()){                       // Chrome и др. — hls.js
+      bkHls=new Hls({maxBufferLength:30});
+      bkHls.loadSource(src); bkHls.attachMedia(audio);
+      bkHls.on(Hls.Events.MANIFEST_PARSED, ()=>{ audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸"; });
+      bkHls.on(Hls.Events.ERROR, (e,data)=>{ if(data&&data.fatal) $("#bkPsub").textContent="ошибка потока — попробуй другую книгу"; });
+    } else {
+      audio.src=src; audio.play().catch(()=>{});
+    }
+  }
   function playIdx(i){
     if(i<0||i>=queue.length)return; qi=i; const t=queue[i]; if(!t.url)return;
     stopOthers(); audio.src=t.url; audio.play().catch(()=>{});
@@ -4481,13 +4489,13 @@ window.GamesHub=(function(){
     // и играем в обычном аудио-плеере, БЕЗ видео.
     if(b.rt){
       stopOthers();
-      $("#bkPnm").textContent=b.title||""; $("#bkPsub").textContent="загрузка аудио…";
+      $("#bkPnm").textContent=b.title||""; $("#bkPsub").textContent="загрузка потока…";
       $("#bkPplay").textContent="⏳"; player.classList.add("show");
       try{
-        const d=await apiGet("/api/download?url="+encodeURIComponent(b.url)+"&key="+encodeURIComponent("rutube-"+b.rt), 180000);
-        if(d&&d.ok&&d.url){ queue=[{title:b.title,url:API_BASE+d.url}]; qi=0; playIdx(0); return; }
+        const d=await apiGet("/api/rthls?id="+encodeURIComponent(b.rt), 30000);
+        if(d&&d.ok&&d.url){ queue=[]; playHls(API_BASE+d.url); $("#bkPsub").textContent=b.author||"аудиокнига"; return; }
       }catch(e){}
-      $("#bkPsub").textContent="не удалось загрузить аудио — попробуй другую";
+      $("#bkPsub").textContent="не удалось включить книгу — попробуй другую";
       $("#bkPplay").textContent="▶";
       return;
     }
@@ -4533,7 +4541,7 @@ window.GamesHub=(function(){
   $("#bkPplay").addEventListener("click",()=>{if(audio.paused){stopOthers();audio.play();$("#bkPplay").textContent="⏸";}else{audio.pause();$("#bkPplay").textContent="▶";}});
   $("#bkPprev").addEventListener("click",()=>{if(audio.currentTime>3){audio.currentTime=0;}else playIdx(qi-1);});
   $("#bkPnext").addEventListener("click",()=>playIdx(qi+1));
-  $("#bkPx").addEventListener("click",()=>{audio.pause();audio.src="";player.classList.remove("show");});
+  $("#bkPx").addEventListener("click",()=>{audio.pause();stopHls();audio.removeAttribute("src");audio.load();player.classList.remove("show");});
   const bkTime=s=>{s=Math.floor(s||0);return (s/60|0)+":"+String(s%60).padStart(2,"0");};
   audio.addEventListener("timeupdate",()=>{
     const dur=audio.duration, ok=isFinite(dur)&&dur>0;

@@ -584,6 +584,17 @@ def _resolve_stream(url, use_cookies, fast=True):
         return u, ""
     return None, "нет прогрессивного аудиопотока"
 
+def _rutube_hls(vid):
+    """HLS-поток (m3u8) Rutube по id — через публичный play/options. Нужен, чтобы
+    СТРИМИТЬ аудиокнигу (10 часов не скачаешь), а браузер играл её на лету."""
+    try:
+        u = "https://rutube.ru/api/play/options/%s/?format=json&no_404=true" % vid
+        d = _http_json(u)
+        vb = d.get("video_balancer") or {}
+        return vb.get("m3u8") or vb.get("default") or ""
+    except Exception:
+        return ""
+
 def _found(key):
     return [f for f in glob.glob(os.path.join(MUSIC_DIR, key + ".*")) if not f.endswith(".part")]
 
@@ -792,7 +803,63 @@ class Handler(SimpleHTTPRequestHandler):
             if not url:
                 return self._json({"error": "no url"}, 400, cb=cb)
             return self._json(download(url, key), cb=cb)
+        if p.path == "/api/rthls":
+            # адрес HLS-потока Rutube (для стриминга аудиокниг «на лету»)
+            q = parse_qs(p.query)
+            cb = (q.get("callback") or [None])[0]
+            vid = (q.get("id") or [""])[0].strip()
+            m = _rutube_hls(vid) if vid else ""
+            if not m:
+                return self._json({"error": "нет потока"}, cb=cb)
+            return self._json({"ok": True, "url": "/api/hls?u=" + urllib.parse.quote(m, safe="")}, cb=cb)
+        if p.path == "/api/hls":
+            # прокси HLS: у Rutube нет CORS, поэтому m3u8 и сегменты гоняем через
+            # свой сервер (переписывая ссылки внутри плейлиста на этот же прокси).
+            q = parse_qs(p.query)
+            u = (q.get("u") or [""])[0]
+            if not u:
+                return self.send_error(400)
+            return self._proxy_hls(u)
         return self._serve_static()
+
+    def _proxy_hls(self, url):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Fonoteka)"})
+            r = urllib.request.urlopen(req, timeout=20)
+            data = r.read()
+            ct = r.headers.get("Content-Type", "")
+        except Exception as e:
+            return self.send_error(502, str(e)[:120])
+        is_m3u8 = url.split("?")[0].lower().endswith(".m3u8") or "mpegurl" in ct.lower()
+        if is_m3u8:
+            base = url.rsplit("/", 1)[0] + "/"
+            def _wrap(link):
+                seg = link if link.startswith("http") else urllib.parse.urljoin(base, link)
+                return "/api/hls?u=" + urllib.parse.quote(seg, safe="")
+            out = []
+            for line in data.decode("utf-8", "replace").splitlines():
+                s = line.strip()
+                if s and not s.startswith("#"):
+                    out.append(_wrap(s))                       # сегмент или под-плейлист
+                elif 'URI="' in s:                             # #EXT-X-KEY / #EXT-X-MEDIA
+                    out.append(re.sub(r'URI="([^"]+)"',
+                                      lambda m: 'URI="' + _wrap(m.group(1)) + '"', s))
+                else:
+                    out.append(line)
+            body = ("\n".join(out)).encode("utf-8")
+            ctype = "application/vnd.apple.mpegurl"
+        else:
+            body, ctype = data, (ct or "video/mp2t")
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
     def _serve_static(self):
         """Отдача файлов с поддержкой HTTP Range (нужно браузеру для стрима
