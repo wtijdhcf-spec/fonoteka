@@ -898,6 +898,10 @@
   .favbtn.on{color:var(--pink);opacity:1}
   /* скрытие возможностей по роли */
   .role-hidden{display:none !important}
+  /* Прячем ОТКУДА берётся музыка/книги — никаких названий источников на виду.
+     Поиск всё равно идёт по всем (кнопки остаются с классом .on, просто скрыты). */
+  .srctag,.bk-src{display:none !important}
+  #bksrc,#dlsrc{display:none !important}
 </style>
 </head>
 <body>
@@ -1241,7 +1245,7 @@
         </div>
 
         <div id="bkbody">
-          <div class="bk-empty"><div class="bk-empty-ic">📖</div><h3>Что почитать или послушать?</h3><p>Введи название выше — искать будем сразу по 8 библиотекам: <b>akniga</b>, <b>audioknigi</b>, <b>КнигаВухе</b>, <b>YouTube</b>, LibriVox, Архив и другим. Понравившееся жми <b>«Сохранить»</b> — попадёт в «Мои книги».</p></div>
+          <div class="bk-empty"><div class="bk-empty-ic">📖</div><h3>Что почитать или послушать?</h3><p>Введи название выше — найдём по всем библиотекам сразу. Понравившееся жми <b>«Сохранить»</b> — попадёт в «Мои книги».</p></div>
         </div>
       </div>
 
