@@ -4477,8 +4477,20 @@ window.GamesHub=(function(){
     document.querySelectorAll("#bkModalList .bk-chap").forEach((el,k)=>el.classList.toggle("on",k===i));
   }
   async function openBook(b){
-    // Rutube-аудиокнига — встроенный плеер прямо в приложении (без перехода на сайт)
-    if(b.rt){ openEmbed(b); return; }
+    // Rutube-аудиокнига — скачиваем ЧИСТОЕ АУДИО (сервер извлекает через ffmpeg)
+    // и играем в обычном аудио-плеере, БЕЗ видео.
+    if(b.rt){
+      stopOthers();
+      $("#bkPnm").textContent=b.title||""; $("#bkPsub").textContent="загрузка аудио…";
+      $("#bkPplay").textContent="⏳"; player.classList.add("show");
+      try{
+        const d=await apiGet("/api/download?url="+encodeURIComponent(b.url)+"&key="+encodeURIComponent("rutube-"+b.rt), 180000);
+        if(d&&d.ok&&d.url){ queue=[{title:b.title,url:API_BASE+d.url}]; qi=0; playIdx(0); return; }
+      }catch(e){}
+      $("#bkPsub").textContent="не удалось загрузить аудио — попробуй другую";
+      $("#bkPplay").textContent="▶";
+      return;
+    }
     let secs=(b.sections||[]).filter(s=>s.url);
     // YouTube: прямой аудиопоток тянем через сервер (как музыку)
     if(!secs.length && b.yt){
