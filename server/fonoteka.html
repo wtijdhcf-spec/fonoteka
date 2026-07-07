@@ -475,8 +475,11 @@
     /* Вкладки — крупный тап-таргет, ровный горизонтальный скролл без полосы */
     .nav{gap:6px;padding-bottom:2px;scrollbar-width:none}
     .nav::-webkit-scrollbar{display:none}
-    .tab{min-height:44px;padding:7px 13px;font-size:12.5px;border-radius:12px;flex:0 0 auto;white-space:nowrap}
+    .tab{min-height:44px;padding:7px 14px;font-size:12.5px;border-radius:12px;flex:0 0 auto;white-space:nowrap;border:1px solid transparent}
     .tab svg{width:17px;height:17px}
+    /* Активная вкладка — чёткая амбер-пилюля (видно, где ты) */
+    .tab[aria-selected="true"]{background:rgba(247,185,64,.16);color:var(--amber-2);border-color:var(--amber-dim)}
+    .tab[aria-selected="true"] svg{color:var(--amber-2);opacity:1}
     /* Контент — комфортные поля */
     .main{padding:15px 13px calc(var(--player-h) + 26px)}
     .lh-title{font-size:21px;max-width:none;line-height:1.15}
@@ -484,9 +487,13 @@
     /* Поля ввода 16px — iOS не зумит при фокусе; кнопки под палец */
     input[type=text],input[type=search],input[type=email],input[type=password]{font-size:16px;padding:13px 14px}
     .btn-primary,.bk-gobtn,#dlgo{min-height:46px}
-    /* Результаты — крупнее строки и кнопки */
-    .dlrow{padding:9px 6px}
-    .dlplay,.dldl{min-width:40px;min-height:40px}
+    /* Результаты — крупнее строки, обложки и кнопки под палец */
+    .dlrow{padding:10px 7px;gap:11px}
+    .dlthumb{width:64px;height:52px}
+    .dlplay,.dldl{min-width:44px;min-height:44px}
+    /* Строки «Моей музыки» — крупнее обложка и удобнее */
+    .row .cover{width:50px;height:50px}
+    .row .rowacts .iconbtn,.row .rowacts .bindbtn,.row .rowacts .favbtn{min-width:38px;min-height:38px}
   }
   /* ===== Совсем маленькие телефоны (≤380px) — чуть плотнее ===== */
   @media(max-width:380px){
@@ -2285,6 +2292,9 @@
   function activateTab(name){
     $$(".tab").forEach(x=>x.setAttribute("aria-selected", x.dataset.tab===name?"true":"false"));
     $$(".view").forEach(v=>v.classList.toggle("active", v.id===name));
+    // на телефоне подкручиваем активную вкладку в центр горизонтального меню
+    const a=$('.tab[aria-selected="true"]');
+    if(a&&a.scrollIntoView){ try{ a.scrollIntoView({inline:"center",block:"nearest"}); }catch(e){} }
   }
 
   /* ---------- events ---------- */
