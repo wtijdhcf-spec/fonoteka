@@ -803,6 +803,15 @@ class Handler(SimpleHTTPRequestHandler):
         if not os.path.isfile(path):
             return self.send_error(404, "File not found")
         ctype = self.guess_type(path)
+        # Явно проставляем аудио-тип: Python не знает .m4a/.opus и отдаёт их как
+        # application/octet-stream, из-за чего часть браузеров не играет их в
+        # <audio>. Ставим правильный тип — тогда звук играет везде.
+        _ext = os.path.splitext(path)[1].lower()
+        _amime = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".opus": "audio/ogg",
+                  ".ogg": "audio/ogg", ".aac": "audio/aac", ".wav": "audio/wav",
+                  ".flac": "audio/flac", ".webm": "audio/webm"}
+        if _ext in _amime:
+            ctype = _amime[_ext]
         try:
             f = open(path, "rb")
         except OSError:
