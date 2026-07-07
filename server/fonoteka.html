@@ -2022,16 +2022,19 @@
     if(d.ok){ playPreview(x,d.url); btn.textContent="♪"; btn.classList.add("on"); }
     else{ btn.textContent="⚠"; btn.title=(d.error||"").slice(0,180); }
   }
-  function playHlsMain(x, src){
+  function attachHls(src, autoplay){
     stopHlsMain(); audio.onerror=null;
-    if(audio.canPlayType("application/vnd.apple.mpegurl")){ audio.src=src; audio.play().catch(()=>{}); }
+    if(audio.canPlayType("application/vnd.apple.mpegurl")){ audio.src=src; if(autoplay)audio.play().catch(()=>{}); }
     else if(window.Hls && Hls.isSupported()){
-      // startLevel:0 + currentLevel=0 — жёстко самое низкое качество (144p, ~20КБ/с):
-      // прокси слабого сервера успевает, поток не зависает, для звука качество то же.
+      // жёстко самое низкое качество (144p, ~20КБ/с) — прокси слабого сервера
+      // успевает, поток не зависает; для звука качество то же.
       hlsMain=new Hls({maxBufferLength:16, startLevel:0});
       hlsMain.loadSource(src); hlsMain.attachMedia(audio);
-      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>{ hlsMain.currentLevel=0; audio.play().catch(()=>{}); });
-    } else { audio.src=src; audio.play().catch(()=>{}); }
+      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>{ try{hlsMain.currentLevel=0;}catch(e){} if(autoplay)audio.play().catch(()=>{}); });
+    } else { audio.src=src; if(autoplay)audio.play().catch(()=>{}); }
+  }
+  function playHlsMain(x, src){
+    attachHls(src, true);
     $("#pcover").innerHTML = x.thumb?`<img src="${x.thumb}" alt="">`:coverHTML({title:x.title||"♪",artist:x.uploader||"",art:null});
     $("#ptitle").textContent=x.title||"";
     $("#partist").textContent=(x.uploader||"")+" · прослушивание";
@@ -2080,12 +2083,19 @@
     if(!t)return;
     stopHlsMain();
     audio.onerror=null;
-    audio.src=t.url;
+    const rtId=(/rutube-([0-9a-zA-Z]+)\./.exec(t.url||"")||[])[1];
+    if(rtId){
+      // Rutube-трек — играем ПОТОКОМ (скачанный файл на бесплатном сервере стирается).
+      audio.removeAttribute("src");
+      apiGet("/api/rthls?id="+encodeURIComponent(rtId),30000).then(d=>{ if(d&&d.ok&&d.url) attachHls(api(d.url), !!autoplay); }).catch(()=>{});
+    } else {
+      audio.src=t.url;
+      if(autoplay)audio.play().catch(()=>{});
+    }
     $("#pcover").innerHTML=coverHTML(t);
     $("#ptitle").textContent=t.title;
     $("#partist").textContent=t.artist+(t.kind==="preview"?" · отрывок":"");
     $("#player").classList.remove("hidden");
-    if(autoplay)audio.play().catch(()=>{});
     renderLib(); markCards();
   }
   function toggle(){ if(!audio.src)return; playing?audio.pause():audio.play().catch(()=>{}); }
