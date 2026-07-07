@@ -2026,9 +2026,11 @@
     stopHlsMain(); audio.onerror=null;
     if(audio.canPlayType("application/vnd.apple.mpegurl")){ audio.src=src; audio.play().catch(()=>{}); }
     else if(window.Hls && Hls.isSupported()){
-      hlsMain=new Hls({maxBufferLength:20});
+      // startLevel:0 + currentLevel=0 — жёстко самое низкое качество (144p, ~20КБ/с):
+      // прокси слабого сервера успевает, поток не зависает, для звука качество то же.
+      hlsMain=new Hls({maxBufferLength:16, startLevel:0});
       hlsMain.loadSource(src); hlsMain.attachMedia(audio);
-      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>audio.play().catch(()=>{}));
+      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>{ hlsMain.currentLevel=0; audio.play().catch(()=>{}); });
     } else { audio.src=src; audio.play().catch(()=>{}); }
     $("#pcover").innerHTML = x.thumb?`<img src="${x.thumb}" alt="">`:coverHTML({title:x.title||"♪",artist:x.uploader||"",art:null});
     $("#ptitle").textContent=x.title||"";
@@ -4494,9 +4496,10 @@ window.GamesHub=(function(){
     if(audio.canPlayType("application/vnd.apple.mpegurl")){          // Safari — нативно
       audio.src=src; audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸";
     } else if(window.Hls && Hls.isSupported()){                       // Chrome и др. — hls.js
-      bkHls=new Hls({maxBufferLength:30});
+      // жёстко самое низкое качество (144p) — прокси слабого сервера успевает, не зависает
+      bkHls=new Hls({maxBufferLength:16, startLevel:0});
       bkHls.loadSource(src); bkHls.attachMedia(audio);
-      bkHls.on(Hls.Events.MANIFEST_PARSED, ()=>{ audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸"; });
+      bkHls.on(Hls.Events.MANIFEST_PARSED, ()=>{ bkHls.currentLevel=0; audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸"; });
       bkHls.on(Hls.Events.ERROR, (e,data)=>{ if(data&&data.fatal) $("#bkPsub").textContent="ошибка потока — попробуй другую книгу"; });
     } else {
       audio.src=src; audio.play().catch(()=>{});
