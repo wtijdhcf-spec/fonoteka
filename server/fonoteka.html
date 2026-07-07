@@ -462,6 +462,32 @@
     .row{grid-template-columns:46px 1fr auto;gap:11px}
     .row .num,.row .dur{display:none}
   }
+  /* ===== Нормальная мобильная оптимизация (телефоны ≤700px) ===== */
+  @media(max-width:700px){
+    /* Верхняя панель: компактная и «липкая» (вкладки всегда под рукой при прокрутке) */
+    .sidebar{position:sticky;top:0;z-index:35;gap:8px;padding:9px 12px 8px;
+      background:var(--bg);border-bottom:1px solid var(--line);box-shadow:0 8px 20px -14px #000}
+    .brand{margin:0;gap:8px}
+    .brand h1{font-size:18px}
+    .brand .vu{transform:scale(.8);transform-origin:left center}
+    /* «Коллекции» на телефоне прячем — освобождаем ~150px под контент */
+    .side-sec{display:none}
+    /* Вкладки — крупный тап-таргет, ровный горизонтальный скролл без полосы */
+    .nav{gap:6px;padding-bottom:2px;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+    .tab{min-height:44px;padding:7px 13px;font-size:12.5px;border-radius:12px;flex:0 0 auto;white-space:nowrap}
+    .tab svg{width:17px;height:17px}
+    /* Контент — комфортные поля */
+    .main{padding:15px 13px calc(var(--player-h) + 26px)}
+    .lh-title{font-size:21px;max-width:none;line-height:1.15}
+    .lh-sub{font-size:12px}
+    /* Поля ввода 16px — iOS не зумит при фокусе; кнопки под палец */
+    input[type=text],input[type=search],input[type=email],input[type=password]{font-size:16px;padding:13px 14px}
+    .btn-primary,.bk-gobtn,#dlgo{min-height:46px}
+    /* Результаты — крупнее строки и кнопки */
+    .dlrow{padding:9px 6px}
+    .dlplay,.dldl{min-width:40px;min-height:40px}
+  }
   @media(prefers-reduced-motion:reduce){
     *{animation-duration:.001s!important}
     .vu i{animation:none}
