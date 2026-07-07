@@ -1426,6 +1426,44 @@
   let hlsMain=null;
   function stopHlsMain(){ if(hlsMain){ try{hlsMain.destroy();}catch(e){} hlsMain=null; } }
 
+  // ── Разблокировка звука ────────────────────────────────────────────────
+  // На ПК (Chrome) HLS играет через hls.js, а audio.play() вызывается ПОСЛЕ
+  // сетевого запроса (/api/rthls) — то есть уже вне «жеста» пользователя, и
+  // браузер блокирует автозапуск (NotAllowedError) → таймер стоит на 0, музыка
+  // «не слушается». На телефоне играет нативный HLS, поэтому там работает.
+  // Решение: при ПЕРВОМ клике/касании проигрываем короткий тихий звук — это
+  // «активирует» аудио-элементы, и дальше их play() разрешён даже после await.
+  let _audioUnlocked=false, _unlockEl=null;
+  function _silentWav(){
+    const sr=8000,n=64,buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
+    const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+    w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);
+    v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);
+    v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n*2,true);
+    let b="";const by=new Uint8Array(buf);for(let i=0;i<by.length;i++)b+=String.fromCharCode(by[i]);
+    return "data:audio/wav;base64,"+btoa(b);
+  }
+  function unlockAudio(){
+    if(_audioUnlocked)return; _audioUnlocked=true;
+    // Проигрываем тихий блип (~8 мс) на ОТДЕЛЬНОМ элементе (не на плеере, чтобы
+    // не сработали его обработчики «ended» → следующий трек). Одного успешного
+    // play() в жесте достаточно, чтобы браузер разрешил автозапуск дальше.
+    try{ _unlockEl=new Audio(_silentWav()); _unlockEl.volume=0.001; const p=_unlockEl.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){}
+  }
+  // Подстраховка: если браузер ВСЁ РАВНО заблокировал автозапуск (строгая
+  // политика), поток уже загружен hls.js и просто стоит на паузе. «Взводим»
+  // элемент — и на СЛЕДУЮЩЕЕ касание/клик в любом месте он доигрывается сам.
+  const _armed=new Set();
+  function armPlay(el){ if(el) _armed.add(el); }
+  function disarmPlay(el){ if(el) _armed.delete(el); }
+  window.__fonoArmPlay=armPlay;       // раздел «Книги» (#bkAudio) — из другого <script>
+  window.__fonoDisarmPlay=disarmPlay; // снять «взвод» при закрытии/остановке плеера
+  function _retryArmed(){ _armed.forEach(el=>{ try{ const p=el.play(); if(p&&p.then)p.then(()=>_armed.delete(el)).catch(()=>{}); }catch(e){} }); }
+  ["pointerdown","touchstart","mousedown","keydown"].forEach(ev=>{
+    document.addEventListener(ev, unlockAudio, {capture:true});
+    document.addEventListener(ev, _retryArmed, {capture:true});
+  });
+
   // Если страницу открыли как файл (file://) или с любого хоста, кроме самого
   // сервера — запросы к /api всё равно шлём на локальный сервер Фонотеки.
   // ОНЛАЙН (туннель/хостинг): страница и сервер живут на ОДНОМ адресе, поэтому
@@ -2030,8 +2068,8 @@
       // успевает, поток не зависает; для звука качество то же.
       hlsMain=new Hls({maxBufferLength:16, startLevel:0});
       hlsMain.loadSource(src); hlsMain.attachMedia(audio);
-      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>{ try{hlsMain.currentLevel=0;}catch(e){} if(autoplay)audio.play().catch(()=>{}); });
-    } else { audio.src=src; if(autoplay)audio.play().catch(()=>{}); }
+      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>{ try{hlsMain.currentLevel=0;}catch(e){} if(autoplay){ const p=audio.play(); if(p&&p.catch)p.catch(()=>armPlay(audio)); } });
+    } else { audio.src=src; if(autoplay){ const p=audio.play(); if(p&&p.catch)p.catch(()=>armPlay(audio)); } }
   }
   function playHlsMain(x, src){
     attachHls(src, true);
@@ -2056,7 +2094,7 @@
     $("#partist").textContent=(x.uploader||"")+" · прослушивание";
     $("#player").classList.remove("hidden");
     pos=-1;
-    audio.play().catch(()=>{});
+    { const p=audio.play(); if(p&&p.catch)p.catch(()=>armPlay(audio)); }
   }
 
   /* ---------- playback ---------- */
@@ -2090,7 +2128,7 @@
       apiGet("/api/rthls?id="+encodeURIComponent(rtId),30000).then(d=>{ if(d&&d.ok&&d.url) attachHls(api(d.url), !!autoplay); }).catch(()=>{});
     } else {
       audio.src=t.url;
-      if(autoplay)audio.play().catch(()=>{});
+      if(autoplay){ const p=audio.play(); if(p&&p.catch)p.catch(()=>armPlay(audio)); }
     }
     $("#pcover").innerHTML=coverHTML(t);
     $("#ptitle").textContent=t.title;
@@ -2105,8 +2143,8 @@
     loadCurrent(true);
   }
 
-  audio.addEventListener("play",()=>{playing=true;$("#player").classList.add("live");setPP();ensureViz();renderLib();markCards();});
-  audio.addEventListener("pause",()=>{playing=false;$("#player").classList.remove("live");setPP();renderLib();markCards();});
+  audio.addEventListener("play",()=>{playing=true;disarmPlay(audio);$("#player").classList.add("live");setPP();ensureViz();renderLib();markCards();});
+  audio.addEventListener("pause",()=>{playing=false;disarmPlay(audio);$("#player").classList.remove("live");setPP();renderLib();markCards();});
   audio.addEventListener("ended",()=>{ if(repeat){audio.currentTime=0;audio.play();} else step(1); });
 
   // битый/недоступный трек: показать причину и автоматически перейти к следующему
@@ -4501,23 +4539,26 @@ window.GamesHub=(function(){
   function stopOthers(){const m=document.getElementById("audio");if(m&&!m.paused)m.pause();}
   // Стрим аудиокниги (HLS Rutube через наш прокси) — играет на лету, без скачивания.
   function stopHls(){ if(bkHls){ try{bkHls.destroy();}catch(e){} bkHls=null; } }
+  // Если браузер заблокировал автозапуск (ПК, строгая политика) — «взводим»
+  // элемент через общий помощник, чтобы книга доиграла на следующее касание.
+  const bkArm=()=>{ try{ window.__fonoArmPlay && window.__fonoArmPlay(audio); }catch(e){} };
   function playHls(src){
     stopHls();
     if(audio.canPlayType("application/vnd.apple.mpegurl")){          // Safari — нативно
-      audio.src=src; audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸";
+      audio.src=src; const p=audio.play(); if(p&&p.catch)p.catch(bkArm); $("#bkPplay").textContent="⏸";
     } else if(window.Hls && Hls.isSupported()){                       // Chrome и др. — hls.js
       // жёстко самое низкое качество (144p) — прокси слабого сервера успевает, не зависает
       bkHls=new Hls({maxBufferLength:16, startLevel:0});
       bkHls.loadSource(src); bkHls.attachMedia(audio);
-      bkHls.on(Hls.Events.MANIFEST_PARSED, ()=>{ bkHls.currentLevel=0; audio.play().catch(()=>{}); $("#bkPplay").textContent="⏸"; });
+      bkHls.on(Hls.Events.MANIFEST_PARSED, ()=>{ bkHls.currentLevel=0; const p=audio.play(); if(p&&p.catch)p.catch(bkArm); $("#bkPplay").textContent="⏸"; });
       bkHls.on(Hls.Events.ERROR, (e,data)=>{ if(data&&data.fatal) $("#bkPsub").textContent="ошибка потока — попробуй другую книгу"; });
     } else {
-      audio.src=src; audio.play().catch(()=>{});
+      audio.src=src; const p=audio.play(); if(p&&p.catch)p.catch(bkArm);
     }
   }
   function playIdx(i){
     if(i<0||i>=queue.length)return; qi=i; const t=queue[i]; if(!t.url)return;
-    stopOthers(); audio.src=t.url; audio.play().catch(()=>{});
+    stopOthers(); audio.src=t.url; { const p=audio.play(); if(p&&p.catch)p.catch(bkArm); }
     $("#bkPnm").textContent=queue.length>1?(t.title||("Глава "+(i+1))):(t.title||"");
     $("#bkPplay").textContent="⏸"; player.classList.add("show");
     document.querySelectorAll("#bkModalList .bk-chap").forEach((el,k)=>el.classList.toggle("on",k===i));
@@ -4579,7 +4620,7 @@ window.GamesHub=(function(){
   $("#bkPplay").addEventListener("click",()=>{if(audio.paused){stopOthers();audio.play();$("#bkPplay").textContent="⏸";}else{audio.pause();$("#bkPplay").textContent="▶";}});
   $("#bkPprev").addEventListener("click",()=>{if(audio.currentTime>3){audio.currentTime=0;}else playIdx(qi-1);});
   $("#bkPnext").addEventListener("click",()=>playIdx(qi+1));
-  $("#bkPx").addEventListener("click",()=>{audio.pause();stopHls();audio.removeAttribute("src");audio.load();player.classList.remove("show");});
+  $("#bkPx").addEventListener("click",()=>{try{window.__fonoDisarmPlay&&window.__fonoDisarmPlay(audio);}catch(e){}audio.pause();stopHls();audio.removeAttribute("src");audio.load();player.classList.remove("show");});
   const bkTime=s=>{s=Math.floor(s||0);return (s/60|0)+":"+String(s%60).padStart(2,"0");};
   audio.addEventListener("timeupdate",()=>{
     const dur=audio.duration, ok=isFinite(dur)&&dur>0;
