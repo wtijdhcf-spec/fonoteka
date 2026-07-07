@@ -1422,6 +1422,9 @@
   const $=s=>document.querySelector(s);
   const $$=s=>[...document.querySelectorAll(s)];
   const audio=$("#audio");
+  // Потоковое воспроизведение (HLS) — для Rutube: играет за секунды, без скачивания.
+  let hlsMain=null;
+  function stopHlsMain(){ if(hlsMain){ try{hlsMain.destroy();}catch(e){} hlsMain=null; } }
 
   // Если страницу открыли как файл (file://) или с любого хоста, кроме самого
   // сервера — запросы к /api всё равно шлём на локальный сервер Фонотеки.
@@ -1995,9 +1998,15 @@
     const x=dlResults[+btn.dataset.i]; if(!x)return;
     $$(".dlplay.on").forEach(b=>{b.classList.remove("on");b.textContent="▶";});
     btn.disabled=true; btn.textContent="…";
-    // Быстрый путь: прямой стрим без скачивания файла (играть начинает сразу).
-    // Rutube нельзя стримить напрямую (особый формат) — сразу качаем и играем,
-    // не тратя время на заведомо неудачный стрим.
+    // Rutube — СТРИМ через HLS (играет за секунды, без скачивания, только звук).
+    const rt=/rutube\.ru\/video\/([0-9a-zA-Z]+)/.exec(x.url||"");
+    if(rt){
+      try{
+        const d=await apiGet("/api/rthls?id="+encodeURIComponent(rt[1]), 30000);
+        if(d&&d.ok&&d.url){ playHlsMain(x, api(d.url)); btn.textContent="♪"; btn.classList.add("on"); btn.disabled=false; return; }
+      }catch(e){}
+    }
+    // Остальные источники — прямой стрим без скачивания (играть начинает сразу).
     if(!/rutube\.ru/.test(x.url||"")){
       try{
         const d=await apiGet("/api/stream?url="+encodeURIComponent(x.url), 30000);
@@ -2013,7 +2022,22 @@
     if(d.ok){ playPreview(x,d.url); btn.textContent="♪"; btn.classList.add("on"); }
     else{ btn.textContent="⚠"; btn.title=(d.error||"").slice(0,180); }
   }
+  function playHlsMain(x, src){
+    stopHlsMain(); audio.onerror=null;
+    if(audio.canPlayType("application/vnd.apple.mpegurl")){ audio.src=src; audio.play().catch(()=>{}); }
+    else if(window.Hls && Hls.isSupported()){
+      hlsMain=new Hls({maxBufferLength:20});
+      hlsMain.loadSource(src); hlsMain.attachMedia(audio);
+      hlsMain.on(Hls.Events.MANIFEST_PARSED, ()=>audio.play().catch(()=>{}));
+    } else { audio.src=src; audio.play().catch(()=>{}); }
+    $("#pcover").innerHTML = x.thumb?`<img src="${x.thumb}" alt="">`:coverHTML({title:x.title||"♪",artist:x.uploader||"",art:null});
+    $("#ptitle").textContent=x.title||"";
+    $("#partist").textContent=(x.uploader||"")+" · прослушивание";
+    $("#player").classList.remove("hidden");
+    pos=-1;
+  }
   function playPreview(x, fileUrl, isStream){
+    stopHlsMain();
     audio.src=fileUrl;
     // Если прямой стрим отвалился (YouTube заблокировал ссылку) — один раз
     // молча докачиваем файл целиком и играем его.
@@ -2052,6 +2076,7 @@
   function loadCurrent(autoplay){
     const t=tracks[order[pos]];
     if(!t)return;
+    stopHlsMain();
     audio.onerror=null;
     audio.src=t.url;
     $("#pcover").innerHTML=coverHTML(t);
