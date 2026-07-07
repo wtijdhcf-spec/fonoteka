@@ -1269,7 +1269,7 @@
         <div class="bk-hero">
           <div class="bk-kick">✦ Библиотека · книги и аудиокниги</div>
           <h2 class="bk-h1">Найди свою <span class="bk-grad">книгу</span></h2>
-          <p class="bk-lead">Аудиокниги и книги из лучших библиотек сразу — akniga, audioknigi, LibriVox, Интернет-Архив и другие. Слушай и читай бесплатно.</p>
+          <p class="bk-lead">Аудиокниги — ищи и слушай прямо здесь, в приложении. Бесплатно, без переходов на сайт.</p>
           <div class="bk-searchbox">
             <svg class="bk-si" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <input type="text" id="bkq" placeholder="Название книги или автор — например, Мастер и Маргарита…">
@@ -4249,7 +4249,7 @@ window.GamesHub=(function(){
 </script>
 
 <!-- ============ Книги: мини-плеер аудиокниг + список глав ============ -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<script src="hls.min.js"></script>
 <div class="bk-player" id="bkPlayer">
   <div class="bk-p-info">
     <div class="bk-p-thumb">🎧</div>
@@ -4447,7 +4447,7 @@ window.GamesHub=(function(){
     const body=$("#bkbody");
     if(!list.length){
       if(pending){ body.innerHTML='<div class="bk-load"><span class="bk-spin"></span> Ищем книги…</div>'; return; }
-      body.innerHTML=`<div class="bk-empty"><div class="bk-empty-ic">🔍</div><h3>Ничего не нашлось</h3><p>По запросу «${esc(q)}» пусто. Проверь источники выше или измени запрос. Если <b>akniga</b>/<b>audioknigi</b>/<b>YouTube</b> не ищут — запусти Фонотеку через ярлык или программу (нужен локальный сервер).</p></div>`; return;
+      body.innerHTML=`<div class="bk-empty"><div class="bk-empty-ic">🔍</div><h3>Ничего не нашлось</h3><p>По запросу «${esc(q)}» пусто. Попробуй иначе — например, «${esc(q)} аудиокнига» или имя автора.</p></div>`; return;
     }
     list.forEach(b=>{b._id=bkId(b);lastResults[b._id]=b;});
     body.innerHTML=`<p class="bk-count">Найдено по «${esc(q)}»: ${list.length}${pending?' · ищем ещё…':''}</p>
