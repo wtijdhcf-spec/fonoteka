@@ -190,6 +190,12 @@ def _bandcamp_search(query, n=40):
             break
     return items
 
+# Слова в названии, по которым видео — точно НЕ песня (для фильтра музыки Rutube).
+_RT_NOT_MUSIC = ("обзор", "распаковк", "unboxing", "review", "сравнени", "подкаст",
+                 "стрим", "прохожден", "летсплей", "gameplay", "влог", "vlog",
+                 "новости", "трейлер", "интервью", "туториал", "tutorial",
+                 "лайфхак", "реклама", "как сделать", "своими руками", "выпуск ")
+
 def _rutube_search(query, n=30):
     """Каталог Rutube — российский аналог YouTube. Публичный поиск без ключа и
     без входа в аккаунт (параметр client=wdp обязателен, иначе выдача пустая).
@@ -207,6 +213,16 @@ def _rutube_search(query, n=30):
         title = (d.get("title") or "").strip()
         vurl = d.get("video_url") or ""
         if not title or not str(vurl).startswith("http"):
+            continue
+        # ФИЛЬТР «ТОЛЬКО МУЗЫКА»: Rutube — общий видеосервис, по названию песни
+        # выдаёт кучу обзоров/подкастов/стримов. Отсеиваем: (а) длинные видео
+        # (песня короткая, 20с..12мин; обзоры/подкасты длиннее); (б) явно
+        # не-музыку по словам в названии.
+        dur = d.get("duration") or 0
+        low = title.lower()
+        if dur and (dur < 20 or dur > 720):
+            continue
+        if any(w in low for w in _RT_NOT_MUSIC):
             continue
         items.append({
             "key": _safe_key("rutube", d.get("id") or vurl),
