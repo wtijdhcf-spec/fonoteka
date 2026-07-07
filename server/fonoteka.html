@@ -1484,6 +1484,39 @@
     throw new Error(errs.join("  |  "));
   }
 
+  // ── «Сервер просыпается» ──────────────────────────────────────────────
+  // Бесплатный облачный сервер засыпает через 15 мин простоя и просыпается
+  // 30-50 сек. Без подсказки первый клик кажется зависшим («бесконечно»).
+  // Показываем плашку сверху, пока запрос долго не отвечает, и заранее будим
+  // сервер при загрузке страницы, чтобы к первому клику он уже был готов.
+  let _wakeBar=null, _wakeCount=0;
+  function wakeBar(){
+    if(_wakeBar)return _wakeBar;
+    const b=document.createElement("div");
+    b.id="wakeBar";
+    b.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99999;display:none;"+
+      "padding:10px 16px;text-align:center;font-weight:600;font-size:14px;color:#111;"+
+      "background:linear-gradient(90deg,#ffd76a,#ffb347);box-shadow:0 2px 12px rgba(0,0,0,.35)";
+    b.textContent="⏳ Сервер просыпается — подождите ~30 секунд…";
+    document.body.appendChild(b);
+    return (_wakeBar=b);
+  }
+  function wakeShow(){ _wakeCount++; wakeBar().style.display="block"; }
+  function wakeHide(){ _wakeCount=Math.max(0,_wakeCount-1); if(_wakeCount===0&&_wakeBar)_wakeBar.style.display="none"; }
+  // Обёртка: если промис не ответил за `afterMs`, показываем плашку; прячем по завершении.
+  async function withWake(promise, afterMs){
+    let shown=false;
+    const t=setTimeout(()=>{ shown=true; wakeShow(); }, afterMs||3500);
+    try{ return await promise; }
+    finally{ clearTimeout(t); if(shown)wakeHide(); }
+  }
+  window.withWake=withWake;  // чтобы раздел «Книги» (отдельный <script>) тоже показывал плашку
+  function warmUp(){
+    // Пингуем сервер сразу при загрузке. Если ответил быстро — он уже проснулся.
+    // Если долго — показываем плашку, чтобы первый клик не выглядел «зависшим».
+    withWake(apiGet("/api/ping", 60000).catch(()=>null), 2500).catch(()=>{});
+  }
+
   let tracks=[];                 // {id,title,artist,url,kind,art,dur,blob}
   let collections=[];            // {id,name,color,ids:[],created}
   let currentView={type:"all"};  // {type:"all"} | {type:"collection",id}
@@ -1984,7 +2017,9 @@
   async function dlDownload(btn){
     const x=dlResults[+btn.dataset.i]; if(!x)return;
     btn.disabled=true; btn.textContent="Качаю… ⏳";
-    const d=await fetchDownload(x,3);
+    const _slow=setTimeout(()=>{ btn.textContent="Просыпается… ⏳"; }, 6000);
+    const d=await withWake(fetchDownload(x,3), 4000);
+    clearTimeout(_slow);
     if(d.ok){
       const t={id:newId(),title:x.title||"",artist:x.uploader||(x.source==="soundcloud"?"SoundCloud":"YouTube"),url:api(d.url),kind:"download",art:x.thumb||null,dur:x.duration||null};
       tracks.push(t); persist(t); addToCurrentCollection(t.id);
@@ -2002,14 +2037,14 @@
     const rt=/rutube\.ru\/video\/([0-9a-zA-Z]+)/.exec(x.url||"");
     if(rt){
       try{
-        const d=await apiGet("/api/rthls?id="+encodeURIComponent(rt[1]), 30000);
+        const d=await withWake(apiGet("/api/rthls?id="+encodeURIComponent(rt[1]), 60000), 4000);
         if(d&&d.ok&&d.url){ playHlsMain(x, api(d.url)); btn.textContent="♪"; btn.classList.add("on"); btn.disabled=false; return; }
       }catch(e){}
     }
     // Остальные источники — прямой стрим без скачивания (играть начинает сразу).
     if(!/rutube\.ru/.test(x.url||"")){
       try{
-        const d=await apiGet("/api/stream?url="+encodeURIComponent(x.url), 30000);
+        const d=await withWake(apiGet("/api/stream?url="+encodeURIComponent(x.url), 60000), 4000);
         if(d&&d.ok&&d.stream){
           playPreview(x,d.stream,true); btn.textContent="♪"; btn.classList.add("on"); btn.disabled=false;
           return;
@@ -3074,6 +3109,7 @@
   }
 
   (async function boot(){
+    warmUp();  // будим облачный сервер заранее, до первого клика
     await openDB();
     await loadCollectionsFromDB();
     await loadTracksFromDB();
@@ -4530,7 +4566,8 @@ window.GamesHub=(function(){
       $("#bkPnm").textContent=b.title||""; $("#bkPsub").textContent="загрузка потока…";
       $("#bkPplay").textContent="⏳"; player.classList.add("show");
       try{
-        const d=await apiGet("/api/rthls?id="+encodeURIComponent(b.rt), 30000);
+        const call=apiGet("/api/rthls?id="+encodeURIComponent(b.rt), 60000);
+        const d=await (window.withWake?window.withWake(call,4000):call);
         if(d&&d.ok&&d.url){ queue=[]; playHls(API_BASE+d.url); $("#bkPsub").textContent=b.author||"аудиокнига"; return; }
       }catch(e){}
       $("#bkPsub").textContent="не удалось включить книгу — попробуй другую";

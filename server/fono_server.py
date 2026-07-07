@@ -739,6 +739,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path)
+        if p.path == "/api/ping":
+            # Дешёвый эндпоинт «разбуди сервер»: фронт дёргает его при загрузке,
+            # чтобы бесплатный сервер проснулся ДО первого клика (иначе первое
+            # скачивание/воспроизведение висит 30-50 сек, кажется «бесконечно»).
+            q = parse_qs(p.query)
+            cb = (q.get("callback") or [None])[0]
+            return self._json({"ok": True, "ready": True}, cb=cb)
         if p.path in ("/", "/index.html"):
             self.send_response(302)
             self.send_header("Location", "/fonoteka.html")
