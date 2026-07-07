@@ -10,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY fono_server.py fonoteka.html ./
+COPY fono_server.py fonoteka.html hls.min.js ./
 
 # В облаке YouTube не работает (блокирует дата-центры) — отключаем его и
 # ютуб-зависимые каталоги. Остаются Rutube / SoundCloud / Bandcamp.
